@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Know Time Phone Safe</title>
+<style>
+  html,body{margin:0;padding:0;background:#07101f;color:#e8eef9;font-family:Arial,Helvetica,sans-serif;font-size:16px;}
+  .wrap{max-width:760px;margin:0 auto;padding:14px;}
+  h1{font-size:24px;margin:8px 0 4px;}
+  .sub{color:#a9b7cf;margin-bottom:14px;line-height:1.35;}
+  .card{background:#0c1729;border:1px solid #22334f;border-radius:16px;padding:14px;margin:12px 0;}
+  label{display:block;color:#a9b7cf;margin:10px 0 5px;}
+  input,button{width:100%;font-size:18px;padding:12px;border-radius:12px;border:1px solid #2b3d5d;background:#081326;color:#e8eef9;}
+  input[type=range]{padding:0;}
+  button{background:#17315a;margin-top:12px;font-weight:bold;}
+  .row{display:grid;grid-template-columns:1fr;gap:10px;}
+  @media(min-width:680px){.row{grid-template-columns:1fr 1fr;}}
+  .clock{width:100%;max-width:420px;margin:8px auto;display:block;}
+  .gauge{height:26px;background:#122139;border:1px solid #2b3d5d;border-radius:20px;overflow:hidden;}
+  .bar{height:100%;width:50%;background:linear-gradient(90deg,#ff7b7b,#ffd166,#78e09b);}
+  .big{font-size:30px;font-weight:bold;margin:8px 0;}
+  .small{color:#a9b7cf;font-size:14px;line-height:1.35;}
+  .readout{line-height:1.45;white-space:pre-wrap;}
+  .pill{display:inline-block;padding:6px 10px;border:1px solid #2b3d5d;border-radius:999px;margin:4px 4px 0 0;background:#081326;}
+  .err{display:none;background:#3a1420;color:#ffd6d6;border:1px solid #8b3947;border-radius:12px;padding:10px;margin:10px 0;white-space:pre-wrap;}
+</style>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#07101f">
+</head>
+<body>
+<div class="wrap">
+  <h1>Know Time — Wave Clock</h1>
+  <div class="sub">Inner wheel = birth pattern. Outer ring = field date. Gauge = friction / synergy read.</div>
+  <div id="err" class="err"></div>
+
+  <div class="card">
+    <div class="row">
+      <div><label for="birth">Birth date</label><input id="birth" type="date" value="1972-10-20"></div>
+      <div><label for="field">Field date</label><input id="field" type="date" value="2026-06-01"></div>
+    </div>
+    <label for="offset">Scroll ahead: <span id="offsetLabel">0</span> days</label>
+    <input id="offset" type="range" min="0" max="62" value="0">
+    <button id="run" type="button">Read the wave</button>
+  </div>
+
+  <div class="card">
+    <svg class="clock" viewBox="0 0 300 300" role="img" aria-label="Know Time clock">
+      <circle cx="150" cy="150" r="132" fill="#07101f" stroke="#2b3d5d" stroke-width="3"></circle>
+      <circle cx="150" cy="150" r="88" fill="#0c1729" stroke="#5677ad" stroke-width="3"></circle>
+      <circle cx="150" cy="150" r="38" fill="#081326" stroke="#ffd166" stroke-width="3"></circle>
+      <line id="outerHand" x1="150" y1="150" x2="150" y2="28" stroke="#78e09b" stroke-width="5" stroke-linecap="round"></line>
+      <line id="innerHand" x1="150" y1="150" x2="150" y2="70" stroke="#8bb7ff" stroke-width="5" stroke-linecap="round"></line>
+      <circle cx="150" cy="150" r="7" fill="#ffd166"></circle>
+      <text x="150" y="18" text-anchor="middle" fill="#a9b7cf" font-size="12">FIELD</text>
+      <text x="150" y="292" text-anchor="middle" fill="#a9b7cf" font-size="12">BIRTH</text>
+      <text id="innerText" x="150" y="143" text-anchor="middle" fill="#e8eef9" font-size="14" font-weight="bold">Inner</text>
+      <text id="outerText" x="150" y="165" text-anchor="middle" fill="#e8eef9" font-size="14" font-weight="bold">Outer</text>
+    </svg>
+    <div class="gauge"><div id="bar" class="bar"></div></div>
+    <div class="big"><span id="score">--</span>% <span id="mode">ready</span></div>
+    <div id="tags"></div>
+  </div>
+
+  <div class="card"><h2>Read</h2><div id="readout" class="readout"></div></div>
+</div>
+<script>
+(function(){
+  function $(id){return document.getElementById(id);}
+  var boot12={
+    1:['Lead','Org',true],2:['Org','Com',false],3:['Com','Org',false],4:['Lead','Lead',false],5:['Org','Com',true],6:['Com','Com',false],7:['Lead','Org',false],8:['Org','Lead',false],9:['Com','Lead',true],10:['Lead','Com',false],11:['Org','Org',false],12:['Com','Lead',false]
+  };
+  var roleVerb={Org:'Absorb',Com:'Transmit',Lead:'Reflect'};
+  var stageName={1:'Initial Org',2:'Structured Org',3:'Stabilized Org',4:'Initial Com',5:'Compressed Com',6:'Coherent Com',7:'Directional Lead',8:'Creation Activation',9:'Integration'};
+  function showErr(e){var box=$('err'); box.style.display='block'; box.textContent=String(e && e.message ? e.message : e);}
+  function parseDate(s){
+    if(!s) throw new Error('Missing date.');
+    var a=s.split('-');
+    if(a.length!==3) throw new Error('Bad date: '+s);
+    return new Date(Number(a[0]), Number(a[1])-1, Number(a[2]));
+  }
+  function iso(d){
+    var y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), day=('0'+d.getDate()).slice(-2);
+    return y+'-'+m+'-'+day;
+  }
+  function addDays(d,n){var x=new Date(d.getTime()); x.setDate(x.getDate()+n); return x;}
+  function dayOfYear(d){var start=new Date(d.getFullYear(),0,1); return Math.floor((d-start)/86400000)+1;}
+  function profile(d){
+    var m=d.getMonth()+1, b=boot12[m], doy=dayOfYear(d), st=((doy-1)%9)+1;
+    return {date:iso(d),month:m,held:b[0],expr:b[1],create:b[2],doy:doy,stage:st,verbHeld:roleVerb[b[0]],verbExpr:roleVerb[b[1]],stageName:stageName[st]};
+  }
+  function angleForDate(d){return (dayOfYear(d)-1)/365*360;}
+  function setHand(id,deg,len){
+    var rad=(deg-90)*Math.PI/180, cx=150, cy=150;
+    $(id).setAttribute('x2', String(cx+Math.cos(rad)*len));
+    $(id).setAttribute('y2', String(cy+Math.sin(rad)*len));
+  }
+  function score(a,b){
+    var s=35;
+    if(a.held===b.held) s+=20;
+    if(a.expr===b.expr) s+=20;
+    if(a.expr===b.held) s+=15;
+    if(b.expr===a.held) s+=10;
+    if(a.stage===b.stage) s+=8;
+    if(a.stage+b.stage===10) s+=7;
+    if(a.create||b.create) s+=3;
+    if(s>100)s=100; return s;
+  }
+  function advice(n){ if(n>=75)return ['High synergy','move']; if(n>=55)return ['Mixed traction','small clean steps']; if(n>=40)return ['Friction present','slow down']; return ['High friction','chill / observe']; }
+  function update(){
+    try{
+      $('err').style.display='none';
+      var birth=parseDate($('birth').value), base=parseDate($('field').value), off=Number($('offset').value||0), field=addDays(base,off);
+      $('offsetLabel').textContent=String(off);
+      var inner=profile(birth), outer=profile(field), n=score(inner,outer), ad=advice(n);
+      setHand('innerHand', angleForDate(birth), 82); setHand('outerHand', angleForDate(field), 122);
+      $('innerText').textContent='Inner '+inner.held+'→'+inner.expr;
+      $('outerText').textContent='Outer '+outer.held+'→'+outer.expr;
+      $('bar').style.width=n+'%'; $('score').textContent=String(n); $('mode').textContent=ad[0];
+      $('tags').innerHTML='<span class="pill">Birth '+inner.date+'</span><span class="pill">Field '+outer.date+'</span><span class="pill">Use mode: '+ad[1]+'</span>';
+      var lines=[];
+      lines.push('Birth date / inner wheel');
+      lines.push(inner.date+' = '+inner.held+' → '+inner.expr+'. Core move: '+inner.verbHeld+'. Outlet move: '+inner.verbExpr+'. Rolling-9: '+inner.stage+' — '+inner.stageName+'.');
+      lines.push('');
+      lines.push('Field date / outer ring');
+      lines.push(outer.date+' = '+outer.held+' → '+outer.expr+'. Field pressure asks for '+outer.verbHeld+' first, then '+outer.verbExpr+'. Rolling-9: '+outer.stage+' — '+outer.stageName+'.');
+      lines.push('');
+      lines.push('Interaction curve');
+      lines.push('Synergy score: '+n+'%. Read: '+ad[0]+'. Best action: '+ad[1]+'.');
+      if(inner.held===outer.held) lines.push('Match: your core and the field core are aligned.');
+      if(inner.expr===outer.expr) lines.push('Match: your outlet and the field outlet move the same way.');
+      if(inner.expr===outer.held) lines.push('Handoff: your outlet feeds the field core.');
+      if(n<55) lines.push('Friction note: reduce the move size, observe more, and do one clean step instead of forcing speed.');
+      $('readout').textContent=lines.join('\n');
+      try{localStorage.setItem('know_time_phone_safe', JSON.stringify({birth:$('birth').value,field:$('field').value,offset:off}));}catch(e){}
+    }catch(e){showErr(e);}
+  }
+  try{var saved=localStorage.getItem('know_time_phone_safe'); if(saved){saved=JSON.parse(saved); if(saved.birth)$('birth').value=saved.birth; if(saved.field)$('field').value=saved.field; if(saved.offset!=null)$('offset').value=saved.offset;}}catch(e){}
+  $('run').onclick=update; $('offset').oninput=update; $('birth').onchange=update; $('field').onchange=update; update();
+})();
+</script>
+
+<script>
+(function(){
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  }
+})();
+</script>
+</body>
+</html>

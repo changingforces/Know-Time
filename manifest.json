@@ -1,9 +1,0 @@
-{
-  "name": "Know Time Wave Clock",
-  "short_name": "Know Time",
-  "start_url": "./index.html",
-  "display": "standalone",
-  "background_color": "#07101f",
-  "theme_color": "#07101f",
-  "icons": []
-}
